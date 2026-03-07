@@ -8,10 +8,21 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- TODO: Создать таблицу order_statuses
 -- Столбцы: status (PK), description
+CREATE TABLE order_statuses(
+    status VARCHAR PRIMARY KEY,
+    description VARCHAR(255)
+);
 
 
 -- TODO: Вставить значения статусов
 -- created, paid, cancelled, shipped, completed
+INSERT INTO order_statuses(status, description) VALUES
+    ('CREATED', 'Создан'),
+    ('PAID', 'Оплачен'),
+    ('CANCELLED', 'Отменён'),
+    ('SHIPPED', 'Отправлен'),
+    ('COMPLETED', 'Выполнен');
+
 
 
 -- TODO: Создать таблицу users
@@ -20,7 +31,12 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 --   - email UNIQUE
 --   - email NOT NULL и не пустой
 --   - email валидный (regex через CHECK)
-
+CREATE TABLE users( 
+    id UUID PRIMARY KEY,
+    email VARCHAR UNIQUE NOT NULL CHECK(email ~* '^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+$'),
+    name VARCHAR NOT NULL DEFAULT '', 
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
 
 -- TODO: Создать таблицу orders
 -- Столбцы: id (UUID PK), user_id (FK), status (FK), total_amount, created_at
@@ -28,6 +44,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 --   - user_id -> users(id)
 --   - status -> order_statuses(status)
 --   - total_amount >= 0
+CREATE TABLE orders(
+    id UUID PRIMARY KEY, 
+    user_id UUID NOT NULL REFERENCES users(id), 
+    status VARCHAR NOT NULL REFERENCES order_statuses(status), 
+    total_amount NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (total_amount >= 0), 
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
 
 
 -- TODO: Создать таблицу order_items
@@ -37,6 +60,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 --   - price >= 0
 --   - quantity > 0
 --   - product_name не пустой
+CREATE TABLE order_items(
+    id UUID PRIMARY KEY,
+    order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE, 
+    product_name VARCHAR NOT NULL CHECK (product_name <> ''), 
+    price NUMERIC(10,2) NOT NULL CHECK (price >= 0),
+    quantity INTEGER NOT NULL CHECK (quantity > 0)
+);
 
 
 -- TODO: Создать таблицу order_status_history
@@ -44,6 +74,12 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Ограничения:
 --   - order_id -> orders(id) CASCADE
 --   - status -> order_statuses(status)
+CREATE TABLE order_status_history(
+    id UUID PRIMARY KEY, 
+    order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE, 
+    status VARCHAR NOT NULL REFERENCES order_statuses(status), 
+    changed_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
 
 
 -- ============================================
@@ -52,10 +88,27 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- TODO: Создать функцию триггера check_order_not_already_paid()
 -- При изменении статуса на 'paid' проверить что его нет в истории
 -- Если есть - RAISE EXCEPTION
-
+CREATE OR REPLACE FUNCTION check_order_not_already_paid()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.status = 'PAID' THEN 
+        IF EXISTS(
+            SELECT 1 FROM order_status_history WHERE order_id = NEW.id AND status='PAID'
+        ) THEN
+            RAISE EXCEPTION 'order already paid';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
 -- TODO: Создать триггер trigger_check_order_not_already_paid
 -- BEFORE UPDATE ON orders FOR EACH ROW
+DROP TRIGGER IF EXISTS trigger_check_order_not_already_paid ON orders;
+CREATE TRIGGER trigger_check_order_not_already_paid
+    BEFORE UPDATE ON orders
+    FOR EACH ROW
+    EXECUTE FUNCTION check_order_not_already_paid();
 
 
 -- ============================================

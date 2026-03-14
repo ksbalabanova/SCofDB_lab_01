@@ -122,7 +122,7 @@ class OrderRepository:
             {
                 'user_id': str(order.user_id),
                 'id': str(order.id),
-                'status': order.status,
+                'status': order.status.value,
                 'total_amount': order.total_amount,
                 'created_at': order.created_at
             }
@@ -153,7 +153,7 @@ class OrderRepository:
                 """),
                 {
                     'order_id': str(change.order_id), 
-                    'status': change.status, 
+                    'status': change.status.value, 
                     'changed_at': change.changed_at, 
                     'id': str(change.id)
                 }

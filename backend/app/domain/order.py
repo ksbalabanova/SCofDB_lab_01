@@ -82,15 +82,19 @@ class Order:
         if self.status == OrderStatus.CANCELLED:
             raise OrderCancelledError(self.id)
         order_item = OrderItem(
-            product_name = product_name,
-            price = price,
-            quantity = quantity,
-            order_id= self.id
+            product_name=product_name,
+            price=price,
+            quantity=quantity,
+            order_id=self.id
         )
+        new_total_amount = self.total_amount + order_item.subtotal
+        if new_total_amount < 0:
+            raise InvalidAmountError(new_total_amount)
         self.items.append(order_item)
-        self.total_amount += order_item.subtotal
+        self.total_amount = new_total_amount
         return order_item
 
+    
     def pay(self) -> None:
         if self.status == OrderStatus.PAID:
             raise OrderAlreadyPaidError(self.id)
